@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse  # <-- 1. Ye import karna bohot zaroori hai
 import instaloader
 import re
 
@@ -76,12 +76,14 @@ HTML_PAGE = """
 </html>
 """
 
-@app.get("/api/download")
-def fetch_media(url: str):
+# 2. Yahan response_class=HTMLResponse dena zaroori hai taaki browser UI dikhaye
+@app.get("/", response_class=HTMLResponse)
+def serve_frontend():
     return HTML_PAGE
 
+# 3. Yahan se humne 'async' hata diya hai taaki request hang na ho
 @app.get("/api/download")
-async def fetch_media(url: str):
+def fetch_media(url: str):
     match = re.search(r"(?:p|reel|tv)/([^/?#&]+)", url)
     if not match:
         return {"success": False, "error": "Invalid URL. Use a valid Instagram Reel or Post link."}
