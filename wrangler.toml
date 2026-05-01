@@ -1,7 +1,4 @@
 name = "insta-downloader"
 main = "main.py"
 compatibility_date = "2024-04-01"
-
-[python_worker]
-enabled = true
-
+compatibility_flags = ["python_workers"]
