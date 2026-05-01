@@ -1,11 +1,17 @@
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Response
+from fastapi.responses import HTMLResponse
 import instaloader
 import re
-import requests
+import requests  # <-- Naya import: requirements.txt me bhi add kiya hai
+import base64
 
 app = FastAPI()
 L = instaloader.Instaloader(download_pictures=False, download_videos=False)
+
+# To look like a real browser to Instagram CDN
+PROXY_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+}
 
 HTML_PAGE = """
 <!DOCTYPE html>
@@ -29,6 +35,7 @@ HTML_PAGE = """
             padding: 20px;
         }
         
+        /* Premium Glass Effect */
         .glass-panel {
             background: rgba(255, 255, 255, 0.05);
             backdrop-filter: blur(15px);
@@ -85,7 +92,9 @@ HTML_PAGE = """
             gap: 10px;
         }
         .action-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(220, 39, 67, 0.4); }
+        .action-btn:active { transform: translateY(0); }
         
+        /* Animated Loader */
         .spinner {
             display: none; width: 40px; height: 40px; margin: 20px auto;
             border: 4px solid rgba(255,255,255,0.1); border-top-color: #dc2743;
@@ -93,16 +102,26 @@ HTML_PAGE = """
         }
         @keyframes spin { to { transform: rotate(360deg); } }
         
+        /* Result Preview Area */
         .result-card {
-            display: none; margin-top: 25px; background: rgba(0,0,0,0.3);
-            border-radius: 15px; padding: 15px; border: 1px solid rgba(255,255,255,0.05);
+            display: none;
+            margin-top: 25px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 15px;
+            padding: 15px;
+            border: 1px solid rgba(255,255,255,0.05);
             animation: fadeIn 0.5s ease;
         }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         
         .media-preview-container {
-            width: 100%; border-radius: 10px; overflow: hidden; margin-bottom: 15px; background: #000;
+            width: 100%;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 15px;
+            background: #000;
         }
+        
         video, img { width: 100%; max-height: 300px; display: block; object-fit: contain; }
         
         .btn-group { display: flex; gap: 10px; }
@@ -110,7 +129,8 @@ HTML_PAGE = """
             flex: 1; text-decoration: none; padding: 12px; border-radius: 8px; font-size: 14px;
             font-weight: 600; display: flex; justify-content: center; align-items: center; gap: 8px; transition: 0.3s;
         }
-        .btn-download { background: linear-gradient(to right, #00b09b, #96c93d); color: white; }
+        
+        .btn-download { background: #00b09b; background: linear-gradient(to right, #00b09b, #96c93d); color: white; }
         .btn-download:hover { box-shadow: 0 5px 15px rgba(150, 201, 61, 0.4); }
         
         .error-msg { color: #ff4d4d; font-size: 14px; margin-top: 15px; display: none; }
@@ -135,10 +155,11 @@ HTML_PAGE = """
         <div id="error" class="error-msg"></div>
         
         <div id="result" class="result-card">
-            <div class="media-preview-container" id="media-container"></div>
+            <div class="media-preview-container" id="media-container">
+                </div>
             
             <div class="btn-group">
-                <a href="#" id="download-btn" class="btn-download">
+                <a href="#" id="download-btn" class="btn-download" target="_blank" download="Insta_Media">
                     <i class="fa-solid fa-download"></i> Download File
                 </a>
             </div>
@@ -155,11 +176,16 @@ HTML_PAGE = """
             const downloadBtn = document.getElementById('download-btn');
             
             if(!url) {
-                errorMsg.style.display = "block"; errorMsg.innerHTML = "Please enter a valid Instagram URL!"; return;
+                errorMsg.style.display = "block";
+                errorMsg.innerHTML = "Please enter a valid Instagram URL!";
+                return;
             }
 
-            resultCard.style.display = "none"; errorMsg.style.display = "none";
-            loader.style.display = "block"; mediaContainer.innerHTML = "";
+            // Reset UI
+            resultCard.style.display = "none";
+            errorMsg.style.display = "none";
+            loader.style.display = "block";
+            mediaContainer.innerHTML = "";
 
             try {
                 const response = await fetch(`/api/download?url=${encodeURIComponent(url)}`);
@@ -170,19 +196,26 @@ HTML_PAGE = """
                 if(data.success) {
                     resultCard.style.display = "block";
                     
+                    // Display Media (Stream) through a proxy
                     if(data.type === "Video/Reel") {
-                        mediaContainer.innerHTML = `<video controls autoplay loop playsinline src="${data.download_url}"></video>`;
+                        // Naya Logic: proxy endpoint use karein embedded stream ke liye
+                        const proxiedUrl = `/api/proxy?url=${encodeURIComponent(data.download_url)}`;
+                        mediaContainer.innerHTML = `<video controls autoplay loop playsinline src="${proxiedUrl}"></video>`;
                     } else {
-                        mediaContainer.innerHTML = `<img src="${data.download_url}" alt="Instagram Image">`;
+                        // Naya Logic: proxy endpoint use karein embedded view ke liye
+                        const proxiedUrl = `/api/proxy?url=${encodeURIComponent(data.download_url)}`;
+                        mediaContainer.innerHTML = `<img src="${proxiedUrl}" alt="Instagram Image">`;
                     }
                     
-                    // Yahan humne naye proxy route par link bheja hai
-                    downloadBtn.href = `/api/force_download?link=${encodeURIComponent(data.download_url)}`;
+                    // Keep download link direct (this works fine in a new tab)
+                    downloadBtn.href = data.download_url;
                 } else {
-                    errorMsg.style.display = "block"; errorMsg.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> ${data.error}`;
+                    errorMsg.style.display = "block";
+                    errorMsg.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> ${data.error}`;
                 }
             } catch (error) {
-                loader.style.display = "none"; errorMsg.style.display = "block";
+                loader.style.display = "none";
+                errorMsg.style.display = "block";
                 errorMsg.innerHTML = `<i class="fa-solid fa-wifi"></i> Failed to connect to server.`;
             }
         }
@@ -197,12 +230,15 @@ def serve_frontend():
 
 @app.get("/api/download")
 def fetch_media(url: str):
+    # Shortcode extract karne ka regex logic (Posts, Reels dono ke liye)
     match = re.search(r"(?:p|reel|tv)/([^/?#&]+)", url)
     if not match:
-        return {"success": False, "error": "Invalid URL."}
+        return {"success": False, "error": "Invalid URL. Use a valid Instagram Reel or Post link."}
     
     shortcode = match.group(1)
     try:
+        # Instaloader se post data fetch karna
+        # (Naya logic: No async, just regular def for thread safety on Render free tier)
         post = instaloader.Post.from_shortcode(L.context, shortcode)
         return {
             "success": True,
@@ -210,30 +246,27 @@ def fetch_media(url: str):
             "download_url": post.video_url if post.is_video else post.url
         }
     except Exception as e:
-        return {"success": False, "error": "Could not fetch media. Account might be private."}
+        return {"success": False, "error": f"Scraping failed. Account might be private or temporary block: {str(e)}"}
 
 # ==========================================
-# NAYA ROUTE: FORCE DOWNLOAD PROXY
+# PROXY ENDPOINT (Permanent Fix for broken previews)
 # ==========================================
-@app.get("/api/force_download")
-def force_download(link: str):
+@app.get("/api/proxy")
+def proxy_image(url: str):
+    # To prevent misuse, we can add a basic domain validation here (Optional)
+    # Ensure it's a known Instagram CDN domain
+    if "fbcdn.net" not in url and "instagram.f" not in url:
+        raise HTTPException(status_code=400, detail="Invalid proxy URL.")
+
     try:
-        # Instagram se direct file stream karna
-        req = requests.get(link, stream=True)
-        content_type = req.headers.get("content-type", "")
+        session = requests.Session()
+        # Make the request from our server to the original URL
+        response = session.get(url, headers=PROXY_HEADERS)
+        response.raise_for_status() # Raises exception for bad status codes
         
-        # Extension decide karna (video ya image)
-        ext = "mp4" if "video" in content_type else "jpg"
-        
-        # Browser ko batana ki ye attachment hai (download ke liye)
-        headers = {
-            "Content-Disposition": f'attachment; filename="InstaGrab_Pro_{ext}"'
-        }
-        
-        return StreamingResponse(
-            req.iter_content(chunk_size=1024*1024), 
-            media_type=content_type, 
-            headers=headers
-        )
-    except Exception as e:
-        return {"error": "Failed to download the file."}
+        # Return the content to the frontend, along with the correct Content-Type header
+        return Response(content=response.content, media_type=response.headers['Content-Type'])
+    
+    except requests.exceptions.RequestException as e:
+        print(f"Proxy error: {e}")
+        raise HTTPException(status_code=502, detail="Error fetching image from source.")
