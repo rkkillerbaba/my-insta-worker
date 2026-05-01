@@ -76,8 +76,8 @@ HTML_PAGE = """
 </html>
 """
 
-@app.get("/", response_class=HTMLResponse)
-async def serve_frontend():
+@app.get("/api/download")
+def fetch_media(url: str):
     return HTML_PAGE
 
 @app.get("/api/download")
