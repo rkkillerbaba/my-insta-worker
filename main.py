@@ -1,5 +1,5 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse  # <-- 1. Ye import karna bohot zaroori hai
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 import instaloader
 import re
 
@@ -12,45 +12,173 @@ HTML_PAGE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Instagram Downloader</title>
+    <title>Premium Insta Downloader</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        body { font-family: Arial, sans-serif; background-color: #121212; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .container { background: #1e1e1e; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); text-align: center; max-width: 400px; width: 90%; }
-        h2 { color: #E1306C; margin-bottom: 20px; }
-        input[type="text"] { width: 90%; padding: 12px; margin: 15px 0; border: 1px solid #333; border-radius: 6px; font-size: 16px; background: #333; color: white; }
-        button { background-color: #E1306C; color: white; border: none; padding: 12px 25px; font-size: 16px; border-radius: 6px; cursor: pointer; transition: 0.3s; font-weight: bold; }
-        button:hover { background-color: #C13584; }
-        .result { margin-top: 25px; }
-        .download-btn { display: inline-block; background-color: #4CAF50; color: white; padding: 12px 25px; text-decoration: none; border-radius: 6px; font-weight: bold; margin-top: 15px; }
-        .download-btn:hover { background-color: #45a049; }
-        .loader { display: none; margin-top: 20px; color: #aaa; }
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+        body { 
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364); 
+            color: #fff; 
+            min-height: 100vh; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            padding: 20px;
+        }
+        
+        /* Premium Glass Effect */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 40px 30px;
+            max-width: 450px;
+            width: 100%;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            text-align: center;
+        }
+        
+        h2 {
+            font-size: 28px;
+            margin-bottom: 5px;
+            background: -webkit-linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 600;
+        }
+        p.subtitle { color: #bbb; font-size: 13px; margin-bottom: 25px; }
+        
+        .input-group { position: relative; margin-bottom: 20px; }
+        .input-group i { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: #aaa; }
+        
+        input[type="text"] {
+            width: 100%;
+            padding: 15px 15px 15px 45px;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            color: white;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+        input[type="text"]:focus { border-color: #dc2743; box-shadow: 0 0 10px rgba(220, 39, 67, 0.3); }
+        
+        .action-btn {
+            background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+            color: white;
+            border: none;
+            padding: 15px 20px;
+            border-radius: 12px;
+            width: 100%;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+        .action-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(220, 39, 67, 0.4); }
+        .action-btn:active { transform: translateY(0); }
+        
+        /* Animated Loader */
+        .spinner {
+            display: none; width: 40px; height: 40px; margin: 20px auto;
+            border: 4px solid rgba(255,255,255,0.1); border-top-color: #dc2743;
+            border-radius: 50%; animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        /* Result Preview Area */
+        .result-card {
+            display: none;
+            margin-top: 25px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 15px;
+            padding: 15px;
+            border: 1px solid rgba(255,255,255,0.05);
+            animation: fadeIn 0.5s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .media-preview-container {
+            width: 100%;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 15px;
+            background: #000;
+        }
+        
+        video, img { width: 100%; max-height: 300px; display: block; object-fit: contain; }
+        
+        .btn-group { display: flex; gap: 10px; }
+        .btn-group a {
+            flex: 1; text-decoration: none; padding: 12px; border-radius: 8px; font-size: 14px;
+            font-weight: 600; display: flex; justify-content: center; align-items: center; gap: 8px; transition: 0.3s;
+        }
+        
+        .btn-download { background: #00b09b; background: linear-gradient(to right, #00b09b, #96c93d); color: white; }
+        .btn-download:hover { box-shadow: 0 5px 15px rgba(150, 201, 61, 0.4); }
+        
+        .error-msg { color: #ff4d4d; font-size: 14px; margin-top: 15px; display: none; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>Insta Downloader</h2>
-        <p>Paste Reel or Post link below:</p>
-        <input type="text" id="ig-url" placeholder="https://www.instagram.com/reel/...">
-        <br>
-        <button onclick="fetchDownloadLink()">Get Download Link</button>
+
+    <div class="glass-panel">
+        <h2>InstaGrab Pro</h2>
+        <p class="subtitle">Fast, secure & direct downloads</p>
         
-        <div id="loader" class="loader">Fetching data... Please wait.</div>
-        <div id="result" class="result"></div>
+        <div class="input-group">
+            <i class="fa-solid fa-link"></i>
+            <input type="text" id="ig-url" placeholder="Paste Instagram Reel or Post link here...">
+        </div>
+        
+        <button class="action-btn" onclick="fetchData()">
+            <i class="fa-solid fa-bolt"></i> Generate Link
+        </button>
+        
+        <div id="loader" class="spinner"></div>
+        <div id="error" class="error-msg"></div>
+        
+        <div id="result" class="result-card">
+            <div class="media-preview-container" id="media-container">
+                </div>
+            
+            <div class="btn-group">
+                <a href="#" id="download-btn" class="btn-download" target="_blank" download="Insta_Media">
+                    <i class="fa-solid fa-download"></i> Download File
+                </a>
+            </div>
+        </div>
     </div>
 
     <script>
-        async function fetchDownloadLink() {
+        async function fetchData() {
             const url = document.getElementById('ig-url').value;
-            const resultDiv = document.getElementById('result');
+            const resultCard = document.getElementById('result');
             const loader = document.getElementById('loader');
+            const errorMsg = document.getElementById('error');
+            const mediaContainer = document.getElementById('media-container');
+            const downloadBtn = document.getElementById('download-btn');
             
             if(!url) {
-                alert("Please enter a valid URL!");
+                errorMsg.style.display = "block";
+                errorMsg.innerHTML = "Please enter a valid Instagram URL!";
                 return;
             }
 
-            resultDiv.innerHTML = "";
+            // Reset UI
+            resultCard.style.display = "none";
+            errorMsg.style.display = "none";
             loader.style.display = "block";
+            mediaContainer.innerHTML = "";
 
             try {
                 const response = await fetch(`/api/download?url=${encodeURIComponent(url)}`);
@@ -59,16 +187,25 @@ HTML_PAGE = """
                 loader.style.display = "none";
 
                 if(data.success) {
-                    resultDiv.innerHTML = `
-                        <p style="color: #4CAF50;">Success! Your ${data.type} is ready.</p>
-                        <a href="${data.download_url}" target="_blank" class="download-btn">⬇ Download Media</a>
-                    `;
+                    resultCard.style.display = "block";
+                    
+                    // Display Media (Stream)
+                    if(data.type === "Video/Reel") {
+                        mediaContainer.innerHTML = `<video controls autoplay loop playsinline src="${data.download_url}"></video>`;
+                    } else {
+                        mediaContainer.innerHTML = `<img src="${data.download_url}" alt="Instagram Image">`;
+                    }
+                    
+                    // Set Download Link
+                    downloadBtn.href = data.download_url;
                 } else {
-                    resultDiv.innerHTML = `<p style="color: #f44336;">Error: ${data.error}</p>`;
+                    errorMsg.style.display = "block";
+                    errorMsg.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> ${data.error}`;
                 }
             } catch (error) {
                 loader.style.display = "none";
-                resultDiv.innerHTML = `<p style="color: #f44336;">Failed to connect to server.</p>`;
+                errorMsg.style.display = "block";
+                errorMsg.innerHTML = `<i class="fa-solid fa-wifi"></i> Failed to connect to server.`;
             }
         }
     </script>
@@ -76,12 +213,10 @@ HTML_PAGE = """
 </html>
 """
 
-# 2. Yahan response_class=HTMLResponse dena zaroori hai taaki browser UI dikhaye
 @app.get("/", response_class=HTMLResponse)
 def serve_frontend():
     return HTML_PAGE
 
-# 3. Yahan se humne 'async' hata diya hai taaki request hang na ho
 @app.get("/api/download")
 def fetch_media(url: str):
     match = re.search(r"(?:p|reel|tv)/([^/?#&]+)", url)
@@ -97,4 +232,4 @@ def fetch_media(url: str):
             "download_url": post.video_url if post.is_video else post.url
         }
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": "Could not fetch media. Account might be private."}
